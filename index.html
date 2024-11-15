@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Author Network Visualization</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.1.3/css/bootstrap.min.css">
+    <script src="https://d3js.org/d3.v6.min.js"></script>
+    <style>
+        h2 {
+            margin-bottom: 20px;
+        }
+        #tooltip {
+            position: absolute;
+            background-color: #f9f9f9;
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            display: none;
+            pointer-events: none;
+            font-size: 14px;             
+        }
+        .slider {
+            width: 200px;
+            margin-left: 10px;
+            cursor: pointer;
+        }
+        svg line {
+            stroke: #999;
+            stroke-opacity: 0.6;
+        }
+        svg circle {
+            stroke: #333;
+            stroke-width: 1.5;
+        }
+        .controls label {
+            display: flex;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        .controls label span {
+            min-width: 150px;
+            text-align: right;
+            margin-right: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container my-4">
+        <h2 class="text-center">Author Network Visualization</h2>
+        <div class="row">
+            <div class="col-md-9">
+                <svg id="viz" width="100%" height="800"></svg>
+                <div id="tooltip"></div>
+            </div>
+            <div class="col-md-3">
+                <div class="controls">
+                    <h4>Simulation Controls</h4>
+                    <label>
+                        <span>Charge Strength:</span>
+                        <input type="range" id="chargeStrength" class="slider" min="-100" max="0" value="-30">
+                    </label>
+                    <label>
+                        <span>Collision Radius:</span>
+                        <input type="range" id="collisionRadius" class="slider" min="0" max="20" value="10">
+                    </label>
+                    <label>
+                        <span>Link Strength:</span>
+                        <input type="range" id="linkStrength" class="slider" min="0" max="1" step="0.1" value="0.5">
+                    </label>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        d3.json("data.json").then(data => {
+            const width = document.getElementById('viz').clientWidth;
+            const height = 800;
+            const tooltip = d3.select("#tooltip");
+
+            // Compute node degrees
+            const nodeDegrees = {};
+            data.links.forEach(link => {
+                nodeDegrees[link.source] = (nodeDegrees[link.source] || 0) + 1;
+                nodeDegrees[link.target] = (nodeDegrees[link.target] || 0) + 1;
+            });
+
+            // Define node size scale based on degrees
+            const degreeValues = Object.values(nodeDegrees);
+            const sizeScale = d3.scaleSqrt()
+                .domain([d3.min(degreeValues), d3.max(degreeValues)])
+                .range([3, 12]);
+
+            // Count occurrences of each country and identify top 10
+            const countryCount = {};
+            data.nodes.forEach(d => {
+                countryCount[d.country] = (countryCount[d.country] || 0) + 1;
+            });
+            const topCountries = Object.entries(countryCount)
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 10)
+                .map(d => d[0]);
+
+            // Define color scale for top countries, and default color for others
+            const colorScale = d3.scaleOrdinal(d3.schemeTableau10);
+            const getNodeColor = d => topCountries.includes(d.country) ? colorScale(topCountries.indexOf(d.country)) : "#A9A9A9";
+
+            // Set up SVG
+            const svg = d3.select("#viz");
+
+            // Get initial values from sliders
+            let chargeStrength = +document.getElementById('chargeStrength').value;
+            let collisionRadius = +document.getElementById('collisionRadius').value;
+            let linkStrength = +document.getElementById('linkStrength').value;
+
+            // Force simulation with parameters
+            const simulation = d3.forceSimulation(data.nodes)
+                .force("link", d3.forceLink(data.links).id(d => d.id).strength(linkStrength))
+                .force("charge", d3.forceManyBody().strength(chargeStrength))
+                .force("center", d3.forceCenter(width / 2, height / 2))
+                .force("collide", d3.forceCollide().radius(d => sizeScale(nodeDegrees[d.id] || 1) + collisionRadius));
+
+            // Draw links
+            const link = svg.selectAll("line")
+                .data(data.links)
+                .enter().append("line");
+
+            // Draw nodes as circles with sizes based on degrees
+            const node = svg.selectAll("circle")
+                .data(data.nodes)
+                .enter().append("circle")
+                .attr("r", d => sizeScale(nodeDegrees[d.id] || 1))
+                .attr("fill", d => getNodeColor(d))
+                .call(drag(simulation));
+
+            // Mouseover and click interactions for nodes
+            node.on("mouseover", (event, d) => {
+                // Set opacity for nodes based on affiliation
+                node.style("opacity", o => o.country === d.country ? 1 : 0.2);
+                link.style("opacity", 0.2);
+            }).on("mouseleave", () => {
+                // Reset opacity for nodes and links
+                node.style("opacity", 1);
+                link.style("opacity", 0.6);
+            }).on("click", (event, d) => {
+                // Show tooltip with author and affiliation details
+                tooltip.style("display", "block")
+                       .style("left", `${event.pageX + 5}px`)
+                       .style("top", `${event.pageY + 5}px`)
+                       .html(`<strong>Author:</strong> ${d.id}<br><strong>Country:</strong> ${d.country}`);
+                
+                // Prevent tooltip from hiding when clicking on the node
+                event.stopPropagation();
+            });
+
+            // Hide tooltip on clicking anywhere outside nodes
+            svg.on("click", () => {
+                tooltip.style("display", "none");
+            });
+
+            // Update positions on each tick
+            simulation.on("tick", () => {
+                link.attr("x1", d => d.source.x)
+                     .attr("y1", d => d.source.y)
+                     .attr("x2", d => d.target.x)
+                     .attr("y2", d => d.target.y);
+
+                node.attr("cx", d => d.x)
+                     .attr("cy", d => d.y);
+            });
+
+            // Slider controls
+            d3.select("#chargeStrength").on("input", function() {
+                chargeStrength = +this.value;
+                simulation.force("charge").strength(chargeStrength);
+                simulation.alpha(1).restart();
+            });
+
+            d3.select("#collisionRadius").on("input", function() {
+                collisionRadius = +this.value;
+                simulation.force("collide").radius(d => sizeScale(nodeDegrees[d.id] || 1) + collisionRadius);
+                simulation.alpha(1).restart();
+            });
+
+            d3.select("#linkStrength").on("input", function() {
+                linkStrength = +this.value;
+                simulation.force("link").strength(linkStrength);
+                simulation.alpha(1).restart();
+            });
+
+            // Drag functions for nodes
+            function drag(simulation) {
+                return d3.drag()
+                    .on("start", (event, d) => {
+                        if (!event.active) simulation.alphaTarget(0.3).restart();
+                        d.fx = d.x;
+                        d.fy = d.y;
+                    })
+                    .on("drag", (event, d) => {
+                        d.fx = event.x;
+                        d.fy = event.y;
+                    })
+                    .on("end", (event, d) => {
+                        if (!event.active) simulation.alphaTarget(0);
+                        d.fx = null;
+                        d.fy = null;
+                    });
+            }
+        }).catch(error => {
+            console.error('Error loading or processing data:', error);
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,73 @@
+/* General Styles */
+body {
+    font-family: Arial, sans-serif;
+    margin: 0;
+    padding: 0;
+  }
+  
+  /* Container for the entire page */
+  .container {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+  }
+  
+  /* Header Styles */
+  header {
+    background-color: #333;
+    color: #fff;
+    padding: 10px;
+  }
+  
+  header h1 {
+    margin: 0;
+  }
+  
+  /* Content Area */
+  .content {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+  }
+  
+  /* Visualization Area */
+  #visualization {
+    flex: 4;
+  }
+  
+  /* Controls Area */
+  .controls {
+    flex: 1;
+    padding: 10px;
+    background-color: #f4f4f4;
+    overflow-y: auto;
+  }
+  
+  .controls h2 {
+    margin-top: 0;
+  }
+  
+  .controls label {
+    display: block;
+    margin-bottom: 10px;
+  }
+  
+  /* Tooltip Styles */
+  #tooltip {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+    background-color: white;
+    padding: 5px;
+    border: 1px solid black;
+    border-radius: 5px;
+  }
+  
+  #tooltip strong {
+    font-size: 14px;
+  }
+  
+  #tooltip p {
+    margin: 5px 0 0 0;
+  }
+  
